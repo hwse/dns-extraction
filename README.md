@@ -37,23 +37,35 @@ Signal the end of transmission.
 
 The message contains:
 * ID: 1
-* 
+* random number sent by the client in announcement
 
 ## Example transmission
 
 1. Client sends Announcement:
     * File Name: super-secret.txt
     * Host Label: database-server 
-    * first data message: 1
-    * last data message: 2
+    * Random Number: 48309
 2. Server responds:
     * Confirm announcement
-    * File id: 1
+    * Random Number: 48309
+    * Next Id for the client to use: 2
 3. Client sends Data Message
-    * File id: 1
-    * 
+    * Id: 2
     * Segments: "password="
 4. Server confirms 
+    * Acknowledge last data message
+    * Next Id for the client to use: 3
+5. Client send Data Message
+    * Id: 3
+    * Segments: "password123"
+6. Server confirms 
+    * Acknowledge last data message
+    * Next Id for the client to use: 4
+7. Client send Finish message
+    * id: 4
+    * random nr: 48309
+8. Server confirms that transmission finished
+    * random nr: 48309
 
 ## TODO
 
