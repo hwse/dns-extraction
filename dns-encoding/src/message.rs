@@ -19,11 +19,11 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn initial(host: String, file_name: String) -> Message {
+    pub fn initial(host: String, file_name: String, rnd_nr: u16) -> Message {
         Message::Announcement {
             host,
             file_name,
-            rnd_nr: rand::random(),
+            rnd_nr
         }
     }
 }
