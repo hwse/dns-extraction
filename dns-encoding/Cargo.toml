@@ -7,3 +7,4 @@ edition = "2018"
 
 [dependencies]
 rand = "0.7.3"
+trust-dns-proto = "0.19.5"

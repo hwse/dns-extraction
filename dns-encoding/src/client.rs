@@ -1,8 +1,8 @@
 use crate::message::{Message, MessageResponse, Id, DataResponse, FinishResponse};
-use std::cmp::{max, min};
+use std::cmp::min;
 
 
-struct TransmissionState {
+pub struct TransmissionState {
     host: String,
     file_name: String,
     data: Vec<u8>,
@@ -13,13 +13,13 @@ struct TransmissionState {
 }
 
 impl TransmissionState {
-    fn new(host: String, file_name: String, data: Vec<u8>, slice_size: usize) -> TransmissionState {
+    pub fn new(host: String, file_name: String, data: Vec<u8>, slice_size: usize) -> TransmissionState {
         assert!(slice_size > 0);
         let random_nr = rand::random();
         TransmissionState { host, file_name, data, slice_size, index: 0, last_id: 0, random_nr }
     }
 
-    fn initial_message(&self) -> Message {
+    pub fn initial_message(&self) -> Message {
         Message::initial(self.host.clone(), self.file_name.clone(), self.random_nr)
     }
 
@@ -53,7 +53,7 @@ impl TransmissionState {
         self.next_data_message(next_id)
     }
 
-    fn handle_response(&mut self, response: MessageResponse) -> Option<Message> {
+    pub fn handle_response(&mut self, response: MessageResponse) -> Option<Message> {
         match response {
             MessageResponse::Announcement { rnd_nr, next_id } => {
                 Some(self.next_data_message(next_id))

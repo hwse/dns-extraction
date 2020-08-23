@@ -1,21 +1,20 @@
 use crate::message::{Message, MessageResponse, FinishResponse, DataResponse, Id};
-use std::collections::HashMap;
 
 #[derive(Debug)]
-struct ServerState {
+pub struct ServerState {
     states: Vec<TransmissionState>,
     finished_states: Vec<TransmissionState>,
     id_generator: IdGenerator,
 }
 
 #[derive(Debug)]
-enum ServerError {
+pub enum ServerError {
     UnknownId { id: Id }
 }
 
 impl ServerState {
 
-    fn new() -> ServerState {
+    pub fn new() -> ServerState {
         ServerState {
             states: Vec::new(),
             finished_states: Vec::new(),
@@ -27,7 +26,8 @@ impl ServerState {
         match message {
             Message::Announcement { host, file_name, rnd_nr } => {
                 let next_id = self.id_generator.next_id();
-                let state = TransmissionState::new(rnd_nr, next_id);
+                let state = TransmissionState::new(
+                    rnd_nr, host, file_name, next_id);
                 self.states.push(state);
                 Ok(MessageResponse::Announcement { rnd_nr, next_id })
             }
@@ -67,16 +67,15 @@ impl ServerState {
         let x = self.states
             .iter()
             .enumerate()
-            .find(|(i, state)| state.expected_id == id);
+            .find(|(_i, state)| state.expected_id == id);
         match x {
             None => Err(ServerError::UnknownId { id }),
-            Some((i, s)) => {
+            Some((i, _s)) => {
                 Ok(self.states.remove(i))
             }
         }
     }
 
-    fn write_file(state: TransmissionState) {}
 }
 
 
@@ -142,14 +141,18 @@ mod server_state_tests {
 struct TransmissionState {
     rdm_nr: u16,
     expected_id: Id,
+    host: String,
+    name: String,
     data: Vec<u8>,
 }
 
 impl TransmissionState {
-    fn new(rdm_nr: u16, expected_id: Id) -> TransmissionState {
+    fn new(rdm_nr: u16, host: String, name: String, expected_id: Id) -> TransmissionState {
         TransmissionState {
             rdm_nr,
             expected_id,
+            host,
+            name,
             data: Vec::new(),
         }
     }
@@ -165,7 +168,7 @@ pub struct IdGenerator {
 }
 
 impl IdGenerator {
-    fn new() -> IdGenerator {
+    pub fn new() -> IdGenerator {
         IdGenerator {
             next_id: ID_RANGE_START
         }

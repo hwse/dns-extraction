@@ -1,4 +1,3 @@
-
 pub type Id = u16;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -10,11 +9,11 @@ pub enum Message {
     },
     Data {
         id: Id,
-        data: Vec<u8>
+        data: Vec<u8>,
     },
     Finish {
-        id: Id,
-        rnd_nr: u16
+        id: Id, // TODO: remove me
+        rnd_nr: u16,
     },
 }
 
@@ -23,7 +22,27 @@ impl Message {
         Message::Announcement {
             host,
             file_name,
-            rnd_nr
+            rnd_nr,
+        }
+    }
+
+    fn parse_announcement(dns_message: trust_dns_proto::op::Message) -> Message {
+        assert_eq!(dns_message.query_count(), 1);
+        let name = &dns_message.queries()[0].name();
+        assert_eq!(name.len(), 3);
+
+        Message::Announcement {
+            host: name[0].to_ascii(),
+            file_name: name[1].to_ascii(),
+            rnd_nr: name[2].to_ascii().parse().expect("expected number"),
+        }
+    }
+
+    pub fn from_dns(dns_message: trust_dns_proto::op::Message) -> Message {
+        match dns_message.id() {
+            0 => Message::parse_announcement(dns_message),
+            1 => Message::Finish { id: 0, rnd_nr: 0 },
+            _ => Message::Data { id: dns_message.id(), data: vec![] },
         }
     }
 }
@@ -37,7 +56,7 @@ pub enum DataResponse {
 #[derive(Debug, Eq, PartialEq)]
 pub enum FinishResponse {
     Resend,
-    Acknowledge { rnd_nr: u16 }
+    Acknowledge { rnd_nr: u16 },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -51,5 +70,5 @@ pub enum MessageResponse {
     },
     Finish {
         response: FinishResponse
-    }
+    },
 }
