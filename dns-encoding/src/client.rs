@@ -34,7 +34,6 @@ impl TransmissionState {
         // println!("slice = {:?}", slice);
         chunk.copy_from_slice(&slice);
 
-        println!("chunk = {:?}", chunk);
         Message::Data {
             id: next_id,
             data: chunk,
