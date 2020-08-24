@@ -1,5 +1,8 @@
 pub type Id = u16;
 
+pub const ANNOUNCEMENT_ID: Id = 1;
+pub const FINISH_ID: Id = 2;
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Message {
     Announcement {
@@ -24,41 +27,21 @@ impl Message {
             rnd_nr,
         }
     }
-
-    fn parse_announcement(dns_message: trust_dns_proto::op::Message) -> Message {
-        assert_eq!(dns_message.query_count(), 1);
-        let name = &dns_message.queries()[0].name();
-        assert_eq!(name.len(), 3);
-
-        Message::Announcement {
-            host: name[0].to_ascii(),
-            file_name: name[1].to_ascii(),
-            rnd_nr: name[2].to_ascii().parse().expect("expected number"),
-        }
-    }
-
-    pub fn from_dns(dns_message: trust_dns_proto::op::Message) -> Message {
-        match dns_message.id() {
-            0 => Message::parse_announcement(dns_message),
-            1 => Message::Finish { rnd_nr: 0 },
-            _ => Message::Data { id: dns_message.id(), data: vec![] },
-        }
-    }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum DataResponse {
     Resend,
     Acknowledge { next_id: Id },
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum FinishResponse {
     Resend,
     Acknowledge { rnd_nr: u16 },
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum MessageResponse {
     Announcement {
         rnd_nr: u16,

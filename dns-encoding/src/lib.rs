@@ -1,11 +1,6 @@
+mod translation_tests;
+mod encode;
+mod decode;
 mod server;
 mod client;
 mod message;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
