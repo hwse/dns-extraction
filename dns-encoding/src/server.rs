@@ -1,4 +1,4 @@
-use crate::message::{Message, MessageResponse, FinishResponse, DataResponse, Id};
+use crate::message::{DataResponse, FinishResponse, Id, Message, MessageResponse};
 
 #[derive(Debug)]
 pub struct ServerState {
@@ -9,11 +9,11 @@ pub struct ServerState {
 
 #[derive(Debug)]
 pub enum ServerError {
-    UnknownId { id: Id }
+    UnknownId { id: Id },
+    UnknownRndNr { rnd_nr: u16 },
 }
 
 impl ServerState {
-
     pub fn new() -> ServerState {
         ServerState {
             states: Vec::new(),
@@ -43,8 +43,8 @@ impl ServerState {
                     }
                 })
             }
-            Message::Finish { id, rnd_nr } => {
-                let state = self.pop_state(id)?;
+            Message::Finish { rnd_nr } => {
+                let state = self.pop_state(rnd_nr)?;
                 self.finished_states.push(state);
                 Ok(MessageResponse::Finish {
                     response: FinishResponse::Acknowledge { rnd_nr }
@@ -63,19 +63,18 @@ impl ServerState {
         }
     }
 
-    fn pop_state(&mut self, id: Id) -> Result<TransmissionState, ServerError> {
+    fn pop_state(&mut self, rnd_nr: u16) -> Result<TransmissionState, ServerError> {
         let x = self.states
             .iter()
             .enumerate()
-            .find(|(_i, state)| state.expected_id == id);
+            .find(|(_i, state)| state.rdm_nr == rnd_nr);
         match x {
-            None => Err(ServerError::UnknownId { id }),
+            None => Err(ServerError::UnknownRndNr { rnd_nr }),
             Some((i, _s)) => {
                 Ok(self.states.remove(i))
             }
         }
     }
-
 }
 
 
@@ -90,7 +89,7 @@ mod server_state_tests {
         let message0 = Message::Announcement {
             host: "db-server".to_string(),
             file_name: "passwords.txt".to_string(),
-            rnd_nr: 23523
+            rnd_nr: 23523,
         };
 
         let response0 = server_state.handle_message(message0)
@@ -99,7 +98,7 @@ mod server_state_tests {
             MessageResponse::Announcement { rnd_nr, next_id } => {
                 assert_eq!(23523, rnd_nr);
                 next_id
-            },
+            }
             _ => panic!("Expected an announcement response")
         };
 
@@ -110,14 +109,14 @@ mod server_state_tests {
         let next_id = match response1 {
             MessageResponse::Data { response } => {
                 match response {
-                    DataResponse::Acknowledge { next_id } => {next_id},
-                    DataResponse::Resend => {panic!("Expected an acknowledge")},
+                    DataResponse::Acknowledge { next_id } => { next_id }
+                    DataResponse::Resend => { panic!("Expected an acknowledge") }
                 }
-            },
+            }
             _ => panic!("Expected an data response")
         };
 
-        let message2 = Message::Finish { id: next_id, rnd_nr: 23523 };
+        let message2 = Message::Finish { rnd_nr: 23523 };
         let response2 = server_state.handle_message(message2)
             .expect("expected an response");
         match response2 {
@@ -125,16 +124,15 @@ mod server_state_tests {
                 match response {
                     FinishResponse::Acknowledge { rnd_nr } => {
                         assert_eq!(23523, rnd_nr);
-                    },
-                    FinishResponse::Resend => { panic!("Expected an acknowledge") },
+                    }
+                    FinishResponse::Resend => { panic!("Expected an acknowledge") }
                 }
-            },
+            }
             _ => panic!("Expected Finish response")
         }
 
         assert_eq!(1, server_state.finished_states.len());
     }
-
 }
 
 #[derive(Debug)]
@@ -202,5 +200,4 @@ mod id_generator_tests {
         assert_eq!(2, generator.next_id());
         assert_eq!(3, generator.next_id());
     }
-
 }

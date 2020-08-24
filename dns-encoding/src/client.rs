@@ -48,7 +48,7 @@ impl TransmissionState {
         // last message was received -> progress to next chunk
         self.index += self.slice_size;
         if self.index >= self.data.len() {
-            return Message::Finish { id: next_id, rnd_nr: self.random_nr }
+            return Message::Finish { rnd_nr: self.random_nr }
         }
         self.next_data_message(next_id)
     }
@@ -131,8 +131,7 @@ mod tests {
 
         let response3 = MessageResponse::Data { response: DataResponse::Acknowledge { next_id: 5 } };
         match state.handle_response(response3).expect("Expected another message") {
-            Message::Finish { id, rnd_nr } => {
-                assert_eq!(5, id);
+            Message::Finish { rnd_nr } => {
                 assert_eq!(client_rnd_nr, rnd_nr);
             },
             _ => panic!("Expected a Finish message")

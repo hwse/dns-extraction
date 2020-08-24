@@ -12,7 +12,6 @@ pub enum Message {
         data: Vec<u8>,
     },
     Finish {
-        id: Id, // TODO: remove me
         rnd_nr: u16,
     },
 }
@@ -41,7 +40,7 @@ impl Message {
     pub fn from_dns(dns_message: trust_dns_proto::op::Message) -> Message {
         match dns_message.id() {
             0 => Message::parse_announcement(dns_message),
-            1 => Message::Finish { id: 0, rnd_nr: 0 },
+            1 => Message::Finish { rnd_nr: 0 },
             _ => Message::Data { id: dns_message.id(), data: vec![] },
         }
     }
