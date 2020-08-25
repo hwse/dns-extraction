@@ -1,9 +1,9 @@
 pub type Id = u16;
 
-pub const ANNOUNCEMENT_ID: Id = 1;
-pub const FINISH_ID: Id = 2;
+pub const ANNOUNCEMENT_ID: Id = 0;
+pub const FINISH_ID: Id = 1;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Message {
     Announcement {
         host: String,

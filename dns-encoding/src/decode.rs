@@ -2,8 +2,8 @@ use trust_dns_proto::rr::domain::Label;
 use trust_dns_proto::rr::{Name, RData};
 
 use crate::message::{Id, Message, MessageResponse, DataResponse, FinishResponse};
-use crate::decode::MessageResponseDecoderError::{UnsupportedDnsType, InvalidName};
 use std::net::Ipv4Addr;
+use base32::Alphabet;
 
 const ANNOUNCEMENT_ID: u16 = 0;
 const FINISH_ID: u16 = 1;
@@ -14,7 +14,8 @@ pub struct MessageDecoder {
     minimum_subdomains: usize,
 }
 
-enum MessageDecoderError {
+#[derive(Debug)]
+pub enum MessageDecoderError {
     /** The DNS message contained no queries */
     NoQueries,
     /** The DNS messages contained to few labels */
@@ -25,12 +26,15 @@ enum MessageDecoderError {
     WrongSubdomain,
 
     ExpectedNrLabel,
+
+    InvalidBase32,
 }
 
 pub type MessageResult = Result<Message, MessageDecoderError>;
 
 impl MessageDecoder {
-    fn new(magic_nr: Label, sub_domain: Name) -> MessageDecoder {
+
+    pub fn new(magic_nr: Label, sub_domain: Name) -> MessageDecoder {
         let minimum_subdomains =
             1 + // one for magic nr
                 sub_domain.len() + // subdomains
@@ -44,6 +48,13 @@ impl MessageDecoder {
             ANNOUNCEMENT_ID => self.parse_announcement(payload),
             FINISH_ID => self.parse_finish(payload),
             _ => self.parse_data(payload, dns_message.id()),
+        }
+    }
+
+    pub fn decode_base32(data: &str) -> Result<Vec<u8>, MessageDecoderError> {
+        match base32::decode(Alphabet::Crockford, &data) {
+            None => { Err(MessageDecoderError::InvalidBase32,) },
+            Some(v) => Ok(v)
         }
     }
 
@@ -65,9 +76,11 @@ impl MessageDecoder {
             return Err(MessageDecoderError::NoMagicNr);
         }
 
-        let dns_iter = q_name.iter()
+        let sub_domain_len = self.sub_domain.num_labels();
+
+        let dns_iter= q_name.iter()
             .rev()
-            .take(self.sub_domain.len());
+            .take(sub_domain_len as usize);
         let sub_domain_iter = self.sub_domain
             .iter()
             .rev();
@@ -75,7 +88,7 @@ impl MessageDecoder {
             return Err(MessageDecoderError::WrongSubdomain);
         }
 
-        let end_index = q_name.len() - self.sub_domain.len();
+        let end_index =  (q_name.num_labels() - self.sub_domain.num_labels()) as usize;
         let mut result = Vec::with_capacity(end_index - 1);
         for i in 1..end_index {
             result.push(q_name[i].clone());
@@ -88,10 +101,13 @@ impl MessageDecoder {
             return Err(MessageDecoderError::TooFewLabels)
         }
         let host = payload[0].to_ascii();
-        let file_name = payload[1].to_ascii();
+        let encoded_str = payload[1].to_ascii();
+        let file_name_bytes  = MessageDecoder::decode_base32(encoded_str.as_str())?;
+        let file_name = String::from_utf8(file_name_bytes).unwrap();
+
         let rnd_nr: u16 = payload[2].to_ascii()
             .parse()
-            .map_err(|e| MessageDecoderError::ExpectedNrLabel)?;
+            .map_err(|_| MessageDecoderError::ExpectedNrLabel)?;
         Ok(Message::Announcement { host, file_name, rnd_nr })
     }
 
@@ -111,9 +127,9 @@ impl MessageDecoder {
         if payload.len() < 1 {
             return Err(MessageDecoderError::TooFewLabels);
         }
-        let rnd_nr: u16 = payload[2].to_ascii()
+        let rnd_nr: u16 = payload[0].to_ascii()
             .parse()
-            .map_err(|e| MessageDecoderError::ExpectedNrLabel)?;
+            .map_err(|_| MessageDecoderError::ExpectedNrLabel)?;
         Ok(Message::Finish { rnd_nr })
     }
 }
@@ -159,8 +175,8 @@ impl MessageResponseDecoder {
                 if cname.len() < 3 {
                     return Err(MessageResponseDecoderError::TooFewLabels);
                 }
-                let rnd_nr = cname[1].to_ascii().parse().map_err(|e| MessageResponseDecoderError::InvalidNumber)?;
-                let next_id = cname[2].to_ascii().parse().map_err(|e| MessageResponseDecoderError::InvalidNumber)?;
+                let rnd_nr = cname[1].to_ascii().parse().map_err(|_| MessageResponseDecoderError::InvalidNumber)?;
+                let next_id = cname[2].to_ascii().parse().map_err(|_| MessageResponseDecoderError::InvalidNumber)?;
 
                 Ok(MessageResponse::Announcement { rnd_nr, next_id })
             },
@@ -172,7 +188,7 @@ impl MessageResponseDecoder {
                         if cname.len() < 3 {
                             return Err(MessageResponseDecoderError::TooFewLabels)
                         }
-                        let rnd_nr = cname[2].to_ascii().parse().map_err(|e| MessageResponseDecoderError::InvalidNumber)?;
+                        let rnd_nr = cname[2].to_ascii().parse().map_err(|_| MessageResponseDecoderError::InvalidNumber)?;
                         Ok(MessageResponse::Finish { response: FinishResponse::Acknowledge { rnd_nr } })
                     },
                     _ => Err(MessageResponseDecoderError::InvalidName)
