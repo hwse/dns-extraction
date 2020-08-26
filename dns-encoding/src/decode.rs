@@ -1,8 +1,7 @@
 use trust_dns_proto::rr::domain::Label;
-use trust_dns_proto::rr::{Name, RData};
+use trust_dns_proto::rr::Name;
 
-use crate::message::{Id, Message, MessageResponse, DataResponse, FinishResponse};
-use std::net::Ipv4Addr;
+use crate::message::{Id, Message};
 use base32::Alphabet;
 
 const ANNOUNCEMENT_ID: u16 = 0;
@@ -113,18 +112,18 @@ impl MessageDecoder {
 
 
     fn parse_data(&self, payload: Vec<Label>, id: Id) -> Result<Message, MessageDecoderError> {
-        if payload.len() < 1 {
+        if payload.is_empty() {
             return Err(MessageDecoderError::TooFewLabels);
         }
         let data = payload[0].as_bytes()
             .iter()
-            .map(|x| *x)
+            .copied()
             .collect();
         Ok(Message::Data { id, data })
     }
 
     fn parse_finish(&self, payload: Vec<Label>) -> Result<Message, MessageDecoderError> {
-        if payload.len() < 1 {
+        if payload.is_empty() {
             return Err(MessageDecoderError::TooFewLabels);
         }
         let rnd_nr: u16 = payload[0].to_ascii()
@@ -132,83 +131,4 @@ impl MessageDecoder {
             .map_err(|_| MessageDecoderError::ExpectedNrLabel)?;
         Ok(Message::Finish { rnd_nr })
     }
-}
-
-#[derive(Debug)]
-pub enum MessageResponseDecoderError {
-    NoAnswers,
-    UnsupportedDnsType,
-    InvalidIpv4,
-    InvalidName,
-    TooFewLabels,
-    InvalidNumber,
-}
-
-pub struct MessageResponseDecoder {
-}
-
-impl MessageResponseDecoder {
-
-    pub fn new() -> MessageResponseDecoder {
-        MessageResponseDecoder {}
-    }
-
-    fn parse_ip(&self, ip: &Ipv4Addr) -> Result<MessageResponse, MessageResponseDecoderError> {
-        let bytes = ip.octets();
-        if bytes[0] == 1 && bytes[1] == 1 {
-            Ok(MessageResponse::Data { response: DataResponse::Resend })
-        } else if bytes[0] == 2 && bytes[1] == 2 {
-            let next_id = u16::from_le_bytes([bytes[2], bytes[3]]);
-            Ok(MessageResponse::Data { response: DataResponse::Acknowledge { next_id } })
-        } else {
-            Err(MessageResponseDecoderError::InvalidIpv4)
-        }
-    }
-
-    fn parse_cname(&self, cname: &Name) -> Result<MessageResponse, MessageResponseDecoderError> {
-        if cname.len() < 2 {
-            return Err(MessageResponseDecoderError::TooFewLabels)
-        }
-        let message_type = &cname[0].to_ascii();
-        match message_type.as_str() {
-            "a" => {
-                if cname.len() < 3 {
-                    return Err(MessageResponseDecoderError::TooFewLabels);
-                }
-                let rnd_nr = cname[1].to_ascii().parse().map_err(|_| MessageResponseDecoderError::InvalidNumber)?;
-                let next_id = cname[2].to_ascii().parse().map_err(|_| MessageResponseDecoderError::InvalidNumber)?;
-
-                Ok(MessageResponse::Announcement { rnd_nr, next_id })
-            },
-            "f" => {
-                let finish_type = cname[1].to_ascii();
-                match finish_type.as_str() {
-                    "r" => Ok(MessageResponse::Finish { response: FinishResponse::Resend }),
-                    "a" => {
-                        if cname.len() < 3 {
-                            return Err(MessageResponseDecoderError::TooFewLabels)
-                        }
-                        let rnd_nr = cname[2].to_ascii().parse().map_err(|_| MessageResponseDecoderError::InvalidNumber)?;
-                        Ok(MessageResponse::Finish { response: FinishResponse::Acknowledge { rnd_nr } })
-                    },
-                    _ => Err(MessageResponseDecoderError::InvalidName)
-                }
-            },
-            _ => Err(MessageResponseDecoderError::InvalidName)
-        }
-    }
-
-    pub fn decode(&self, message: &trust_dns_proto::op::Message) -> Result<MessageResponse, MessageResponseDecoderError> {
-        if message.answers().is_empty() {
-            return Err(MessageResponseDecoderError::NoAnswers)
-        }
-        let record = &message.answers()[0];
-        let x = match record.rdata() {
-            RData::A(ip) => self.parse_ip(ip),
-            RData::CNAME(cname) => self.parse_cname(cname),
-            _ => Err(MessageResponseDecoderError::UnsupportedDnsType)
-        };
-        x
-    }
-
 }

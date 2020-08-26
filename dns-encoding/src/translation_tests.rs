@@ -59,8 +59,6 @@ mod message_response_tests {
 
     use trust_dns_proto::rr::{Name, RData, Record};
 
-    use crate::decode::MessageResponseDecoder;
-    use crate::encode::MessageResponseEncoder;
     use crate::message::{DataResponse, FinishResponse, MessageResponse};
 
     fn messages_to_test() -> Vec<MessageResponse> {
@@ -83,12 +81,10 @@ mod message_response_tests {
 
     #[test]
     fn test_symmetric() {
-        let encoder = MessageResponseEncoder::new();
-        let decoder = MessageResponseDecoder::new();
         for message in messages_to_test() {
-            let r_data = encoder.encode(message.clone());
+            let r_data = message.clone().encode();
             let dns_message = create_dns_message(r_data);
-            let message2 = decoder.decode(&dns_message);
+            let message2 = MessageResponse::decode(&dns_message);
             assert_eq!(message, message2.unwrap());
         }
     }

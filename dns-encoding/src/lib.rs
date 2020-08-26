@@ -1,7 +1,8 @@
 
+pub mod encode;
+pub mod decode;
+pub mod server;
+pub mod client;
+pub mod message;
+
 mod translation_tests;
-mod encode;
-mod decode;
-mod server;
-mod client;
-mod message;

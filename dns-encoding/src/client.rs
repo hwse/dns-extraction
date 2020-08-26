@@ -56,6 +56,9 @@ impl TransmissionState {
     pub fn handle_response(&mut self, response: MessageResponse) -> Option<Message> {
         match response {
             MessageResponse::Announcement { rnd_nr, next_id } => {
+                if rnd_nr != self.random_nr {
+                    return None
+                }
                 Some(self.next_data_message(next_id))
             }
             MessageResponse::Data { response } => {
@@ -72,7 +75,12 @@ impl TransmissionState {
             MessageResponse::Finish { response } => {
                 match response {
                     FinishResponse::Resend => { panic!("TODO: implement resend") },
-                    FinishResponse::Acknowledge { rnd_nr } => None,
+                    FinishResponse::Acknowledge { rnd_nr } => {
+                        if rnd_nr != self.random_nr {
+                            println!("WARNING: finish acknowledge contained wrong random nr!")
+                        }
+                        None
+                    },
                 }
             }
         }

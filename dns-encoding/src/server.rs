@@ -106,10 +106,10 @@ mod server_state_tests {
         let response1 = server_state.handle_message(message1)
             .expect("expected an response");
 
-        let next_id = match response1 {
+        match response1 {
             MessageResponse::Data { response } => {
                 match response {
-                    DataResponse::Acknowledge { next_id } => { next_id }
+                    DataResponse::Acknowledge { next_id: _ } => { }
                     DataResponse::Resend => { panic!("Expected an acknowledge") }
                 }
             }
@@ -156,8 +156,6 @@ impl TransmissionState {
     }
 }
 
-const ANNOUNCEMENTS_ID: u16 = 0;
-const FINISH_ID: u16 = 1;
 const ID_RANGE_START: u16 = 2;
 
 #[derive(Debug)]
