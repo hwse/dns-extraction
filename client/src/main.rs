@@ -1,6 +1,6 @@
 use std::fs;
 use std::io;
-use std::net::{UdpSocket, SocketAddrV4, Ipv4Addr};
+use std::net::{UdpSocket, SocketAddrV4};
 
 use structopt::StructOpt;
 use trust_dns_proto::rr::domain::Label;
@@ -11,7 +11,7 @@ use dns_encoding::client::TransmissionState;
 use dns_encoding::encode::MessageEncoder;
 use dns_encoding::message::{Message, MessageResponse};
 
-use log::{debug, info, trace, warn};
+use log::{debug, info};
 use std::str::FromStr;
 
 #[derive(Debug, StructOpt)]

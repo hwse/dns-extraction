@@ -3,17 +3,14 @@ use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 use std::path::Path;
 
-use log::{debug, info, trace, warn};
+use log::{debug, info, warn};
 use structopt::StructOpt;
-use trust_dns_proto::op::Header;
-use trust_dns_proto::rr::{IntoName, Name, RData, Record};
+use trust_dns_proto::rr::{Name, Record};
 use trust_dns_proto::rr::domain::Label;
-use trust_dns_proto::rr::record_type::RecordType::A;
 use trust_dns_proto::serialize::binary::{BinDecodable, BinDecoder, BinEncodable, BinEncoder};
 
 use dns_encoding::decode::MessageDecoder;
-use dns_encoding::message::MessageResponse;
-use dns_encoding::server::{ServerError, ServerState};
+use dns_encoding::server::ServerState;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "dns-exfiltrating-client", about = "An client to exfiltrate files via dns.")]
