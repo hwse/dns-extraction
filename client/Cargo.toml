@@ -10,3 +10,5 @@ edition = "2018"
 structopt = "0.3"
 trust-dns-proto = "0.19.5"
 dns-encoding = { path = "../dns-encoding" }
+log = "0.4"
+env_logger = "0.7.1"

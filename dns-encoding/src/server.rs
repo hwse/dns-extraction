@@ -3,7 +3,7 @@ use crate::message::{DataResponse, FinishResponse, Id, Message, MessageResponse}
 #[derive(Debug)]
 pub struct ServerState {
     states: Vec<TransmissionState>,
-    finished_states: Vec<TransmissionState>,
+    pub finished_states: Vec<TransmissionState>,
     id_generator: IdGenerator,
 }
 
@@ -136,12 +136,12 @@ mod server_state_tests {
 }
 
 #[derive(Debug)]
-struct TransmissionState {
+pub struct TransmissionState {
     rdm_nr: u16,
     expected_id: Id,
-    host: String,
-    name: String,
-    data: Vec<u8>,
+    pub host: String,
+    pub name: String,
+    pub data: Vec<u8>,
 }
 
 impl TransmissionState {
