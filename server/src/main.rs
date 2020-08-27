@@ -3,7 +3,7 @@ use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 use std::path::Path;
 
-use log::{debug, info, warn};
+use log::{debug, info, warn, error};
 use structopt::StructOpt;
 use trust_dns_proto::rr::{Name, Record};
 use trust_dns_proto::rr::domain::Label;
@@ -11,6 +11,8 @@ use trust_dns_proto::serialize::binary::{BinDecodable, BinDecoder, BinEncodable,
 
 use dns_encoding::decode::MessageDecoder;
 use dns_encoding::server::ServerState;
+use dns_encoding::server::TransmissionState;
+use std::io;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "dns-exfiltrating-client", about = "An client to exfiltrate files via dns.")]
@@ -33,18 +35,21 @@ fn main() -> std::io::Result<()> {
 
     let opt: ServerOptions = ServerOptions::from_args();
     info!("opt = {:?}", opt);
+
     let exfiltration_path = Path::new(&opt.exfiltration_directory);
     assert!(exfiltration_path.exists(), "Exfiltration directory must exist");
-    let address = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, opt.port);
-    let socket = UdpSocket::bind(address)?;
-    let mut buffer = vec![0 as u8; 1024];
-    let mut send_buffer = Vec::with_capacity(1024);
 
+    let address = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, opt.port);
     let magic_nr = Label::from_ascii(opt.magic_nr.as_str()).unwrap();
     let sub_domain = Name::from_ascii(opt.sub_domain.as_str()).unwrap();
+
+    let mut buffer = vec![0 as u8; 1024];
+    let mut send_buffer = Vec::with_capacity(1024);
     let message_decoder = MessageDecoder::new(magic_nr, sub_domain);
 
     let mut server_state = ServerState::new();
+
+    let socket = UdpSocket::bind(address)?;
 
     loop {
         let (bytes_read, source) = socket.recv_from(&mut buffer)?;
@@ -72,12 +77,22 @@ fn main() -> std::io::Result<()> {
             }
         }
 
+        write_finished_states(&exfiltration_path, &mut server_state.finished_states);
+    }
+}
 
-        for state in &server_state.finished_states {
-            println!("Finished transmission of file {} from host {}", state.name, state.host);
-            let target_path = exfiltration_path.join(&state.name);
-            let mut file = File::create(target_path)?;
-            file.write_all(&state.data)?;
+fn write_state(exfiltration_path: &Path, state: &TransmissionState) -> io::Result<()> {
+    let target_path = exfiltration_path.join(&state.name);
+    let mut file = File::create(target_path)?;
+    file.write_all(&state.data)
+}
+
+fn write_finished_states(exfiltration_path: &Path, finished_states: &mut Vec<TransmissionState>)  {
+    for state in finished_states.iter() {
+        match write_state(&exfiltration_path, &state) {
+            Ok(()) => { info!("Successfully received file '{}' from host {}", state.name, state.host) },
+            Err(e) => { error!("Failed to write file '{}' from host {}. Error: {}", state.name, state.host, e) },
         }
     }
+    finished_states.clear();
 }
