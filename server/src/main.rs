@@ -1,19 +1,20 @@
 use std::fs::File;
-use std::io::Write;
-use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
+use std::io::{Write, Error};
+use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket, SocketAddr};
 use std::path::Path;
 
-use log::{debug, info, trace, warn};
+use log::{debug, info, trace, warn, error};
 use structopt::StructOpt;
-use trust_dns_proto::op::Header;
+use trust_dns_proto::op::{Header, Message};
 use trust_dns_proto::rr::{IntoName, Name, RData, Record};
 use trust_dns_proto::rr::domain::Label;
 use trust_dns_proto::rr::record_type::RecordType::A;
 use trust_dns_proto::serialize::binary::{BinDecodable, BinDecoder, BinEncodable, BinEncoder};
 
-use dns_encoding::decode::MessageDecoder;
+use dns_encoding::decode::{MessageDecoder, MessageDecoderError};
 use dns_encoding::message::MessageResponse;
 use dns_encoding::server::{ServerError, ServerState};
+use trust_dns_proto::error::ProtoError;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "dns-exfiltrating-client", about = "An client to exfiltrate files via dns.")]
@@ -31,7 +32,7 @@ struct ServerOptions {
     port: u16,
 }
 
-fn main() -> std::io::Result<()> {
+fn main() {
     env_logger::init();
 
     let opt: ServerOptions = ServerOptions::from_args();
@@ -39,24 +40,42 @@ fn main() -> std::io::Result<()> {
     let exfiltration_path = Path::new(&opt.exfiltration_directory);
     assert!(exfiltration_path.exists(), "Exfiltration directory must exist");
     let address = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, opt.port);
-    let socket = UdpSocket::bind(address)?;
+    let socket = UdpSocket::bind(address).expect("Cant bind to socket");
     let mut buffer = vec![0 as u8; 1024];
     let mut send_buffer = Vec::with_capacity(1024);
 
-    let magic_nr = Label::from_ascii(opt.magic_nr.as_str()).unwrap();
-    let sub_domain = Name::from_ascii(opt.sub_domain.as_str()).unwrap();
+    let magic_nr = Label::from_ascii(opt.magic_nr.as_str()).expect("Magic nr must be valid dns label");
+    let sub_domain = Name::from_ascii(opt.sub_domain.as_str()).expect("Subdomain must be valid dns name");
     let message_decoder = MessageDecoder::new(magic_nr, sub_domain);
 
     let mut server_state = ServerState::new();
 
     loop {
-        let (bytes_read, source) = socket.recv_from(&mut buffer)?;
+        let (bytes_read, source) = match socket.recv_from(&mut buffer) {
+            Ok(result) => result,
+            Err(e) => {
+                error!("Failed to receive");
+                continue
+            },
+        };
         debug!("Received from {}: Message with {} bytes", source, bytes_read);
 
         let mut bin_decoder = BinDecoder::new(&buffer);
-        let mut dns_message = trust_dns_proto::op::Message::read(&mut bin_decoder).unwrap();
+        let mut dns_message = match trust_dns_proto::op::Message::read(&mut bin_decoder) {
+            Ok(result) => result,
+            Err(e) => {
+                error!("Failed to decode dns message, error: {:?}", e);
+                continue
+            },
+        };
         debug!("Received dns message = {:?}", dns_message);
-        let message = message_decoder.decode(&dns_message).unwrap();
+        let message = match message_decoder.decode(&dns_message) {
+            Ok(result) => result,
+            Err(e) => {
+                error!("Failed to decode information from dns message, error: {:?}", e);
+                continue
+            },
+        };
         debug!("Decoded message = {:?}", message);
 
         match server_state.handle_message(message) {
@@ -67,11 +86,19 @@ fn main() -> std::io::Result<()> {
                 dns_message.add_answer(Record::from_rdata(name, 120, r_data));
                 let mut bin_encoder = BinEncoder::new(&mut send_buffer);
                 dns_message.emit(&mut bin_encoder).unwrap();
-                socket.send_to(&send_buffer, source)?;
+                match socket.send_to(&send_buffer, source) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        error!("Failed to send response, error: {:?}", e);
+                        send_buffer.clear();
+                        continue
+                    },
+                }
                 send_buffer.clear();
             }
             Err(e) => {
-                warn!("Server error: {:?}", e)
+                warn!("Server error: {:?}", e);
+                continue
             }
         }
 
