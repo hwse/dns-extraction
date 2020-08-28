@@ -43,6 +43,7 @@ impl MessageEncoder {
         query.set_name(name);
 
         dns_message.set_id(id);
+        dns_message.set_recursion_desired(true);
         dns_message.add_query(query);
         dns_message
     }

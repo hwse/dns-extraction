@@ -1,20 +1,17 @@
 use std::fs::File;
-use std::io::{Write, Error};
-use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket, SocketAddr};
+use std::io::Write;
+use std::io;
+use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 use std::path::Path;
 
-use log::{debug, info, trace, warn, error};
+use log::{debug, error, info, warn};
 use structopt::StructOpt;
-use trust_dns_proto::op::{Header, Message};
-use trust_dns_proto::rr::{IntoName, Name, RData, Record};
+use trust_dns_proto::rr::{Name, Record};
 use trust_dns_proto::rr::domain::Label;
-use trust_dns_proto::rr::record_type::RecordType::A;
 use trust_dns_proto::serialize::binary::{BinDecodable, BinDecoder, BinEncodable, BinEncoder};
 
-use dns_encoding::decode::{MessageDecoder, MessageDecoderError};
-use dns_encoding::message::MessageResponse;
-use dns_encoding::server::{ServerError, ServerState};
-use trust_dns_proto::error::ProtoError;
+use dns_encoding::decode::{MessageDecoder};
+use dns_encoding::server::{ServerState, TransmissionState};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "dns-exfiltrating-client", about = "An client to exfiltrate files via dns.")]
@@ -54,9 +51,9 @@ fn main() {
         let (bytes_read, source) = match socket.recv_from(&mut buffer) {
             Ok(result) => result,
             Err(e) => {
-                error!("Failed to receive");
-                continue
-            },
+                error!("Failed to receive message, error: {:?}", e);
+                continue;
+            }
         };
         debug!("Received from {}: Message with {} bytes", source, bytes_read);
 
@@ -65,16 +62,16 @@ fn main() {
             Ok(result) => result,
             Err(e) => {
                 error!("Failed to decode dns message, error: {:?}", e);
-                continue
-            },
+                continue;
+            }
         };
         debug!("Received dns message = {:?}", dns_message);
         let message = match message_decoder.decode(&dns_message) {
             Ok(result) => result,
             Err(e) => {
                 error!("Failed to decode information from dns message, error: {:?}", e);
-                continue
-            },
+                continue;
+            }
         };
         debug!("Decoded message = {:?}", message);
 
@@ -87,18 +84,18 @@ fn main() {
                 let mut bin_encoder = BinEncoder::new(&mut send_buffer);
                 dns_message.emit(&mut bin_encoder).unwrap();
                 match socket.send_to(&send_buffer, source) {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(e) => {
                         error!("Failed to send response, error: {:?}", e);
                         send_buffer.clear();
-                        continue
-                    },
+                        continue;
+                    }
                 }
                 send_buffer.clear();
             }
             Err(e) => {
                 warn!("Server error: {:?}", e);
-                continue
+                continue;
             }
         }
 
@@ -112,11 +109,11 @@ fn write_state(exfiltration_path: &Path, state: &TransmissionState) -> io::Resul
     file.write_all(&state.data)
 }
 
-fn write_finished_states(exfiltration_path: &Path, finished_states: &mut Vec<TransmissionState>)  {
+fn write_finished_states(exfiltration_path: &Path, finished_states: &mut Vec<TransmissionState>) {
     for state in finished_states.iter() {
         match write_state(&exfiltration_path, &state) {
-            Ok(()) => { info!("Successfully received file '{}' from host {}", state.name, state.host) },
-            Err(e) => { error!("Failed to write file '{}' from host {}. Error: {}", state.name, state.host, e) },
+            Ok(()) => { info!("Successfully received file '{}' from host {}", state.name, state.host) }
+            Err(e) => { error!("Failed to write file '{}' from host {}. Error: {}", state.name, state.host, e) }
         }
     }
     finished_states.clear();
