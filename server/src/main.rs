@@ -102,12 +102,22 @@ fn main() {
             }
         }
 
+        write_finished_states(&exfiltration_path, &mut server_state.finished_states);
+    }
+}
 
-        for state in &server_state.finished_states {
-            println!("Finished transmission of file {} from host {}", state.name, state.host);
-            let target_path = exfiltration_path.join(&state.name);
-            let mut file = File::create(target_path)?;
-            file.write_all(&state.data)?;
+fn write_state(exfiltration_path: &Path, state: &TransmissionState) -> io::Result<()> {
+    let target_path = exfiltration_path.join(&state.name);
+    let mut file = File::create(target_path)?;
+    file.write_all(&state.data)
+}
+
+fn write_finished_states(exfiltration_path: &Path, finished_states: &mut Vec<TransmissionState>)  {
+    for state in finished_states.iter() {
+        match write_state(&exfiltration_path, &state) {
+            Ok(()) => { info!("Successfully received file '{}' from host {}", state.name, state.host) },
+            Err(e) => { error!("Failed to write file '{}' from host {}. Error: {}", state.name, state.host, e) },
         }
     }
+    finished_states.clear();
 }
